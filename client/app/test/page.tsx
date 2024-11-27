@@ -63,7 +63,7 @@ const MediaCombiner: React.FC = () => {
       const formData = new FormData();
       formData.append('script', script);
 
-      const audioResponse = await fetch('http://localhost:5000/generate-audio', {
+      const audioResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/generate-audio`, {
         method: 'POST',
         body: formData
       });

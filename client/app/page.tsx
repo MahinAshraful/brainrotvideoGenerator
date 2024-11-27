@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 
-export default function Home() {
+  export default function Home() {
   const [video, setVideo] = useState<File | null>(null)
   const [script, setScript] = useState('')
   const [processing, setProcessing] = useState(false)

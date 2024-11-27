@@ -2,11 +2,10 @@
 import { useState } from 'react'
 import { AlertCircle, CheckCircle } from 'lucide-react'
 
-  export default function Home() {
+export default function Home() {
   const [video, setVideo] = useState<File | null>(null)
   const [script, setScript] = useState('')
   const [processing, setProcessing] = useState(false)
-  const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
 
@@ -19,28 +18,27 @@ import { AlertCircle, CheckCircle } from 'lucide-react'
 
     setProcessing(true)
     setError(null)
-    setResult(null)
     setVideoUrl(null)
 
-    const formData = new FormData()
-    formData.append('video', video)
-    formData.append('script', script)
-
     try {
-      const response = await fetch('http://localhost:5000/process-video', {
+      // First, save the video file for processing
+      const formData = new FormData()
+      formData.append('video', video)
+      formData.append('script', script)
+
+      const response = await fetch('http://localhost:5000/add-tts-to-video', {
         method: 'POST',
         body: formData,
       })
 
-      const data = await response.json()
-      if (response.ok) {
-        setResult(data)
-        setVideoUrl(`http://localhost:5000/${data.path}`)
-      } else {
-        setError(data.error || 'Failed to process video')
+      if (!response.ok) {
+        throw new Error('Failed to process video')
       }
+
+      const outputPath = await response.text()
+      setVideoUrl(`http://localhost:5000/video/${outputPath}`)
     } catch (err) {
-      setError('Error connecting to server')
+      setError(err instanceof Error ? err.message : 'Error processing video')
     } finally {
       setProcessing(false)
     }
@@ -106,22 +104,20 @@ import { AlertCircle, CheckCircle } from 'lucide-react'
           </div>
         )}
 
-        {result && (
+        {videoUrl && (
           <div className="p-4 bg-green-100 text-green-700 rounded space-y-4">
             <div className="flex items-center gap-2">
               <CheckCircle className="w-5 h-5" />
               <p>Video processed successfully!</p>
             </div>
             
-            {videoUrl && (
-              <div className="space-y-2">
-                <p className="font-medium">Preview processed video:</p>
-                <video controls className="w-full">
-                  <source src={videoUrl} type="video/mp4" />
-                  Your browser does not support the video element.
-                </video>
-              </div>
-            )}
+            <div className="space-y-2">
+              <p className="font-medium">Preview processed video:</p>
+              <video controls className="w-full">
+                <source src={videoUrl} type="video/mp4" />
+                Your browser does not support the video element.
+              </video>
+            </div>
           </div>
         )}
       </div>

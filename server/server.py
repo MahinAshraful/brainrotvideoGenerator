@@ -1,14 +1,16 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, send_file
 from flask_cors import CORS
 import os
+import moviepy.editor as mp
 import asyncio
 import edge_tts
-from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+import time
+import traceback  # Added for detailed error logging
 
 app = Flask(__name__)
 CORS(app)
 
-# Create directories
+# Create directories if they don't exist
 for directory in ['uploads', 'output']:
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -18,75 +20,75 @@ async def generate_tts(text, output_path):
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
 
-@app.route('/process-video', methods=['POST'])
-def process_video():
+@app.route('/add-tts-to-video', methods=['POST'])
+def add_tts_to_video():
     try:
+        # Debug logging
+        print("Received request")
+        print("Files:", request.files)
+        print("Form data:", request.form)
+        
         if 'video' not in request.files:
-            return jsonify({'error': 'No video file provided'}), 400
+            return 'No video file provided', 400
             
         video_file = request.files['video']
         script = request.form.get('script', '')
         
         if not script:
-            return jsonify({'error': 'No script provided'}), 400
+            return 'No script provided', 400
             
         # Set up file paths
         video_path = os.path.join('uploads', 'temp_video.mp4')
         audio_path = os.path.join('uploads', 'temp_audio.wav')
-        output_path = os.path.join('output', 'final_video.mp4')
+        output_filename = f'output_{int(time.time())}.mp4'
+        output_path = os.path.join('output', output_filename)
         
-        # Save uploaded video
+        print(f"Saving video to: {video_path}")
         video_file.save(video_path)
         
-        # Generate TTS audio
+        print("Generating TTS audio")
         asyncio.run(generate_tts(script, audio_path))
         
-        # Load video and new audio
-        video_clip = VideoFileClip(video_path)
+        print("Processing video")
+        video = VideoFileClip(video_path)
+        video = video.without_audio()
         tts_audio = AudioFileClip(audio_path)
         
-        # Cut TTS audio to match video length if needed
-        tts_audio = tts_audio.subclip(0, video_clip.duration)
+        # If TTS is longer than video, trim it
+        if tts_audio.duration > video.duration:
+            tts_audio = tts_audio.set_end(video.duration)
         
-        # Adjust volumes and combine audio
-        tts_audio = tts_audio.volumex(0.7)  # Reduce TTS volume to 70%
-        if video_clip.audio is not None:
-            original_audio = video_clip.audio.volumex(0.3)  # Reduce original audio to 30%
-            final_audio = CompositeAudioClip([original_audio, tts_audio])
-        else:
-            final_audio = tts_audio
-            
-        # Set the final audio to the video
-        final_clip = video_clip.set_audio(final_audio)
+        # Add TTS audio to video
+        final_video = video.set_audio(tts_audio)
         
-        # Write final video with both audio tracks
-        final_clip.write_videofile(output_path, 
-                                 codec='libx264',
-                                 audio_codec='aac')
+        print(f"Saving final video to: {output_path}")
+        final_video.write_videofile(output_path, 
+                                  codec='libx264',
+                                  audio_codec='aac',
+                                  verbose=False,
+                                  logger=None)
         
-        # Clean up resources
-        video_clip.close()
+        # Clean up
+        video.close()
         tts_audio.close()
-        if video_clip.audio is not None:
-            video_clip.audio.close()
-            
-        # Remove temporary files
         os.remove(video_path)
         os.remove(audio_path)
         
-        return jsonify({
-            'success': True,
-            'path': 'final_video.mp4',
-            'message': 'Video processed successfully'
-        })
-        
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        print("Processing complete")
+        return output_filename
 
-@app.route('/output/<path:filename>')
+    except Exception as e:
+        print("Error occurred:")
+        print(traceback.format_exc())  # Print the full error traceback
+        return str(e), 500
+
+@app.route('/video/<filename>')
 def serve_video(filename):
-    return send_from_directory('output', filename)
+    try:
+        return send_file(os.path.join('output', filename))
+    except Exception as e:
+        print(f"Error serving video: {str(e)}")
+        return str(e), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

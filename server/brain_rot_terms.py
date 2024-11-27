@@ -1,17 +1,18 @@
-
 brainrotTerms = """
-skibidi: A reference to the viral "Skibidi Dop Dop Yes Yes" meme song by Little Big, often accompanied by silly dance moves.
+skibidi: A reference to the viral "Skibidi Dop Dop Yes Yes" meme song by Little Big, often accompanied by silly dance moves. (common slang)
+yap: Slang for talking or chatting, often used in a casual or informal context. (common slang)
 gyatt: Slang derived from "goddamn" to express admiration or surprise, often used to comment on someone's Butt.
 rizz: Slang for charisma or charm, particularly in the context of attracting a romantic interest.
 only in ohio: A meme implying that strange or bizarre events supposedly only happen in Ohio.
-duke dennis: A popular YouTuber and Twitch streamer known for his gaming content, especially related to NBA 2K.
-did you pray today: A meme phrase that became popular, often used humorously to check on someone's well-being or behavior. Often associated with Go/Jo
+duke dennis: someone who has a lot of rizz 
 livvy dunne: A famous gymnast and social media influencer known for her presence on TikTok and Instagram.
 rizzing up: The act of using charm or charisma to attract someone romantically.
 baby gronk: Refers to a young football prodigy, sometimes used metaphorically to describe someone showing great potential.
 sussy imposter: A phrase from the game Among Us, referring to a suspicious player who might be the imposter.
 pibby glitch: A reference to the animated series "Come and Learn with Pibby!" where characters are affected by a glitchy corruption.
 in real life: Often abbreviated as IRL, referring to events or interactions happening outside the internet or virtual space.
+beta: The term used to refer to a very basic and normal person, with no unique
+personality. Most of the population is this.
 sigma male: A term from manosphere communities describing a lone wolf type who is successful but doesn't conform to traditional social hierarchies.
 alpha male: A term describing a dominant, assertive man who is perceived as a leader or authority figure.
 omega male: A term describing a man who is on the fringes of social hierarchies, often seen as the opposite of an alpha male.

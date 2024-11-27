@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { AlertCircle, CheckCircle } from 'lucide-react'
 
 export default function Home() {
   const [video, setVideo] = useState<File | null>(null)
@@ -7,6 +8,7 @@ export default function Home() {
   const [processing, setProcessing] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -18,6 +20,7 @@ export default function Home() {
     setProcessing(true)
     setError(null)
     setResult(null)
+    setVideoUrl(null)
 
     const formData = new FormData()
     formData.append('video', video)
@@ -32,6 +35,7 @@ export default function Home() {
       const data = await response.json()
       if (response.ok) {
         setResult(data)
+        setVideoUrl(`http://localhost:5000/${data.path}`)
       } else {
         setError(data.error || 'Failed to process video')
       }
@@ -40,6 +44,16 @@ export default function Home() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && !file.type.startsWith('video/')) {
+      setError('Please upload a valid video file')
+      return
+    }
+    setVideo(file || null)
+    setError(null)
   }
 
   return (
@@ -53,9 +67,14 @@ export default function Home() {
             <input
               type="file"
               accept="video/*"
-              onChange={(e) => setVideo(e.target.files?.[0] || null)}
+              onChange={handleFileChange}
               className="w-full p-2 border rounded"
             />
+            {video && (
+              <p className="text-sm text-gray-600">
+                Selected: {video.name} ({Math.round(video.size / 1024 / 1024)}MB)
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -66,11 +85,14 @@ export default function Home() {
               className="w-full p-2 border rounded h-32"
               placeholder="Enter the text you want to convert to speech..."
             />
+            <p className="text-sm text-gray-600">
+              {script.length} characters
+            </p>
           </div>
 
           <button
             type="submit"
-            disabled={processing}
+            disabled={processing || !video || !script}
             className="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed"
           >
             {processing ? 'Processing...' : 'Process Video'}
@@ -78,15 +100,28 @@ export default function Home() {
         </form>
 
         {error && (
-          <div className="p-4 bg-red-100 text-red-700 rounded">
+          <div className="p-4 bg-red-100 text-red-700 rounded flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
             {error}
           </div>
         )}
 
         {result && (
-          <div className="p-4 bg-green-100 text-green-700 rounded">
-            <p>Video processed successfully!</p>
-            <p className="text-sm mt-2">Output path: {result.output_path}</p>
+          <div className="p-4 bg-green-100 text-green-700 rounded space-y-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-5 h-5" />
+              <p>Video processed successfully!</p>
+            </div>
+            
+            {videoUrl && (
+              <div className="space-y-2">
+                <p className="font-medium">Preview processed video:</p>
+                <video controls className="w-full">
+                  <source src={videoUrl} type="video/mp4" />
+                  Your browser does not support the video element.
+                </video>
+              </div>
+            )}
           </div>
         )}
       </div>

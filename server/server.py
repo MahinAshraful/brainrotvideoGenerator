@@ -74,6 +74,7 @@ def upload_video():
     duration = request.form.get('duration', default=60, type=int)  # Example duration
 
     script = makeScript(temp_path, duration)
+    print(duration, script)
 
     return jsonify({'script': script})
         

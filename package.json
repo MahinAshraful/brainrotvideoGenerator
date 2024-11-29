@@ -1,0 +1,16 @@
+{
+  "name": "brainrot",
+  "version": "1.0.0",
+  "description": "A project that runs both frontend and backend simultaneously.",
+  "main": "run.js",
+  "scripts": {
+    "client": "cd client && npm install && npm run dev",
+    "server": "cd server && pip install -r requirements.txt && python3 server2.py",
+    "dev": "concurrently \"npm run client\" \"npm run server\""
+  },
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "concurrently": "^8.0.1"
+  }
+}

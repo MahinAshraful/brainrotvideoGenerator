@@ -23,18 +23,16 @@ def makeScript(file_stream: io.BytesIO, duration: int) -> str:
     try:
         print("Uploading file to GenAI")
        
-        # Save the in-memory file to a temporary file
         with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmpfile:
             tmpfile.write(file_stream.read())
             temp_filename = tmpfile.name
 
 
         try:
-            video_file = genai.upload_file(path=temp_filename)  # Use the temp file path
+            video_file = genai.upload_file(path=temp_filename)
             print(f"Completed upload: {video_file.uri}")
 
 
-            # Wait for processing
             while video_file.state.name == "PROCESSING":
                 print('.', end='')
                 time.sleep(10)
@@ -45,11 +43,10 @@ def makeScript(file_stream: io.BytesIO, duration: int) -> str:
                 raise ValueError(f"File processing failed with state: {video_file.state.name}")
 
 
-            # Create the prompt
             prompt = (
                 "Make a story out of what is happening in the video pay attention to every detail and make sure it is related to the video and not random. "
                 f"Make sure the estimated speaking time of this story is no more than {int(duration) * 2} seconds long. "
-                f"Use and replace some of the words with these words: {brain_rot_terms.brainrotTerms}"
+                f"Use and replace a lot of the words with these words: {brain_rot_terms.brainrotTerms}"
                 f"Return a string with only the script as if it was a story, dont say here is the video with the duration, go straight into script, "
             )
 

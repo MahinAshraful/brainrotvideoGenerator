@@ -1,5 +1,15 @@
 import type { NextConfig } from 'next';
 
+
+/** @type {import('next').NextConfig} */
+ 
+module.exports = {
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '3000mb',
+    },
+  },
+}
 const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {

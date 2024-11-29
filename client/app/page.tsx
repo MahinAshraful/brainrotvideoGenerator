@@ -19,14 +19,16 @@ const MediaCombiner: React.FC = () => {
         setStatus('loading');
         const ffmpegInstance = new FFmpeg();
         
+        // Updated paths for FFmpeg files
         await ffmpegInstance.load({
-          coreURL: await toBlobURL(`/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`/ffmpeg-core.wasm`, 'application/wasm'),
+          coreURL: await toBlobURL('/ffmpeg/ffmpeg-core.js', 'text/javascript'),
+          wasmURL: await toBlobURL('/ffmpeg/ffmpeg-core.wasm', 'application/wasm'),
         });
         
         setFFmpeg(ffmpegInstance);
         setStatus('idle');
       } catch (err) {
+        console.error('FFmpeg loading error:', err);
         setError('Failed to load FFmpeg');
         setStatus('error');
       }
@@ -68,16 +70,17 @@ const MediaCombiner: React.FC = () => {
 
         console.log(`Video Duration (before ceiling): ${videoDuration}`);
 
-        const ceiledDuration = Math.ceil(videoDuration); // Ensure it's an integer
+        const ceiledDuration = Math.ceil(videoDuration);
         console.log(`Video Duration (ceiled): ${ceiledDuration}`);
 
         const formData = new FormData();
         formData.append('video', videoFile);
-        formData.append('duration', ceiledDuration.toString()); // Append as string
+        formData.append('duration', ceiledDuration.toString());
 
         console.log(`FormData Duration: ${formData.get('duration')}`);
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/getScript`, {
+        // Updated to use relative path
+        const response = await fetch('/api/getScript', {
             method: 'POST',
             body: formData,
         });
@@ -93,10 +96,10 @@ const MediaCombiner: React.FC = () => {
     } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
         setStatus('error');
+        throw err; // Re-throw to be caught by handleCombineMedia
     }
 };
         
-
   const handleCombineMedia = async (): Promise<void> => {
     try {
       if (!ffmpeg) {
@@ -117,14 +120,14 @@ const MediaCombiner: React.FC = () => {
         throw new Error('Video file size exceeds 100MB limit');
       }
 
-        const script = await getScript();
-
-        console.log(script);
+      const script = await getScript();
+      console.log(script);
 
       const formData = new FormData();
       formData.append('script', script);
 
-      const audioResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/generate-audio`, {
+      // Updated to use relative path
+      const audioResponse = await fetch('/api/generate-audio', {
         method: 'POST',
         body: formData
       });

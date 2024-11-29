@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nextjs-python-app
+    runtime: python
+    buildCommand: |
+      # Install frontend dependencies and build
+      cd client
+      npm install
+      npm run build
+      # Install Python dependencies
+      cd ../server
+      pip install -r requirements.txt
+    startCommand: |
+      cd server
+      gunicorn server:app
+    envVars:
+      - key: GOOGLE_GEMINI_KEY
+        sync: false
+    plan: free

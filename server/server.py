@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import asyncio
@@ -9,9 +9,10 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 import io
 import tempfile
-from test import makeScript  
+from test import makeScript
 
-app = Flask(__name__)
+# Modified to serve frontend files
+app = Flask(__name__, static_folder='../client/dist')  # or '../client/build' for Create React App
 CORS(app)
 
 # Configure API key
@@ -26,20 +27,20 @@ async def generate_tts(text, output_path):
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
 
-@app.route('/generate-audio', methods=['POST'])
+@app.route('/api/generate-audio', methods=['POST'])
 def generate_audio():
     try:
         print("Received request for audio generation")
         script = request.form.get('script', '')
-
+        
         if not script:
             return jsonify({'error': 'No text provided'}), 400
-
+        
         print("Generating TTS audio")
         
         with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmpfile:
             temp_filename = tmpfile.name
-
+        
         try:
             asyncio.run(generate_tts(script, temp_filename))
             
@@ -48,7 +49,7 @@ def generate_audio():
                 audio_data = f.read()
             audio_buffer = io.BytesIO(audio_data)
             audio_buffer.seek(0)
-
+            
             return send_file(
                 audio_buffer,
                 mimetype='audio/mpeg',
@@ -57,13 +58,13 @@ def generate_audio():
             )
         finally:
             os.remove(temp_filename)
-
+    
     except Exception as e:
         print("Error occurred during audio generation:")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
-@app.route('/getScript', methods=['POST'])
+@app.route('/api/getScript', methods=['POST'])
 def upload_video():
     try:
         if 'video' not in request.files:
@@ -71,31 +72,42 @@ def upload_video():
         file = request.files['video']
         if file.filename == '':
             return jsonify({'error': 'No selected file'}), 400
-
+        
         # Log all form data
         print("Received Form Data:", request.form)
-
-        duration = request.form.get('duration', default=60, type=int)  # Example duration
+        
+        duration = request.form.get('duration', default=60, type=int)
         print(f"Parsed Duration: {duration}")
-
+        
         if duration is None:
             return jsonify({'error': 'Duration is missing or invalid'}), 400
-
+        
         # Read file into BytesIO
         video_bytes = file.read()
         video_stream = io.BytesIO(video_bytes)
-
+        
         # Call makeScript with in-memory file
         script = makeScript(video_stream, duration)
-
+        
         print(f"Duration: {duration}, Script: {script}")
-
+        
         return jsonify({'script': script}), 200
-
+    
     except Exception as e:
         print("Error occurred in /getScript:")
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
+# Serve static files
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    if path.startswith('api/'):
+        return jsonify({'error': 'Not found'}), 404
+    if path != "" and os.path.exists(app.static_folder + '/' + path):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, 'index.html')
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

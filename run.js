@@ -12,5 +12,3 @@ exec(`start cmd /k "cd server && python server2.py"`, (err) => {
   if (err) console.error("Error starting server:", err.message);
 });
 
-
-

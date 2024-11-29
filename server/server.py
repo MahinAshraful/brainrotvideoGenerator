@@ -1,10 +1,16 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 import os
 import asyncio
 import edge_tts
 import time
 import traceback
+import google.generativeai as genai
+from dotenv import load_dotenv
+import time
+import os
+load_dotenv()
+from test import makeScript 
 
 app = Flask(__name__)
 CORS(app)
@@ -12,6 +18,11 @@ CORS(app)
 # Create output directory if it doesn't exist
 if not os.path.exists('output'):
     os.makedirs('output')
+
+api_key = os.getenv("GOOGLE_GEMINI_KEY")
+if not api_key:
+    raise EnvironmentError("GOOGLE_GEMINI_KEY is not set in environment variables.")
+genai.configure(api_key=api_key)
 
 async def generate_tts(text, output_path):
     voice = "en-US-JennyNeural"
@@ -46,6 +57,26 @@ def generate_audio():
         print("Error occurred:")
         print(traceback.format_exc())
         return str(e), 500
+
+
+@app.route('/getScript', methods=['POST'])
+def upload_video():
+    if 'video' not in request.files:
+        return jsonify({'error': 'No video file provided'}), 400
+    file = request.files['video']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    temp_path = os.path.join('temp', file.filename)
+    os.makedirs('temp', exist_ok=True)
+    file.save(temp_path)
+
+    duration = request.form.get('duration', default=60, type=int)  # Example duration
+
+    script = makeScript(temp_path, duration)
+
+    return jsonify({'script': script})
+        
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

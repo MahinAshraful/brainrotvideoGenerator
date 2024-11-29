@@ -7,18 +7,15 @@ import time
 import traceback
 import google.generativeai as genai
 from dotenv import load_dotenv
-import time
-import os
-load_dotenv()
-from test import makeScript 
+import io
+import tempfile
+from test import makeScript  
 
 app = Flask(__name__)
 CORS(app)
 
-# Create output directory if it doesn't exist
-if not os.path.exists('output'):
-    os.makedirs('output')
-
+# Configure API key
+load_dotenv()
 api_key = os.getenv("GOOGLE_GEMINI_KEY")
 if not api_key:
     raise EnvironmentError("GOOGLE_GEMINI_KEY is not set in environment variables.")
@@ -32,52 +29,73 @@ async def generate_tts(text, output_path):
 @app.route('/generate-audio', methods=['POST'])
 def generate_audio():
     try:
-        print("Received request")
-        print("Form data:", request.form)
-        
+        print("Received request for audio generation")
         script = request.form.get('script', '')
-        
+
         if not script:
-            return 'No text provided', 400
-            
-        # Set up file path
-        output_filename = f'audio_{int(time.time())}.mp3'
-        output_path = os.path.join('output', output_filename)
-        
+            return jsonify({'error': 'No text provided'}), 400
+
         print("Generating TTS audio")
-        asyncio.run(generate_tts(script, output_path))
         
-        print("Processing complete")
-        return send_file(output_path, 
-                        mimetype='audio/mpeg',
-                        as_attachment=True,
-                        download_name=output_filename)
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmpfile:
+            temp_filename = tmpfile.name
+
+        try:
+            asyncio.run(generate_tts(script, temp_filename))
+            
+            # Read the generated audio into a BytesIO buffer
+            with open(temp_filename, 'rb') as f:
+                audio_data = f.read()
+            audio_buffer = io.BytesIO(audio_data)
+            audio_buffer.seek(0)
+
+            return send_file(
+                audio_buffer,
+                mimetype='audio/mpeg',
+                as_attachment=True,
+                download_name=f'audio_{int(time.time())}.mp3'
+            )
+        finally:
+            os.remove(temp_filename)
 
     except Exception as e:
-        print("Error occurred:")
+        print("Error occurred during audio generation:")
         print(traceback.format_exc())
-        return str(e), 500
-
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/getScript', methods=['POST'])
 def upload_video():
-    if 'video' not in request.files:
-        return jsonify({'error': 'No video file provided'}), 400
-    file = request.files['video']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+    try:
+        if 'video' not in request.files:
+            return jsonify({'error': 'No video file provided'}), 400
+        file = request.files['video']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
 
-    temp_path = os.path.join('temp', file.filename)
-    os.makedirs('temp', exist_ok=True)
-    file.save(temp_path)
+        # Log all form data
+        print("Received Form Data:", request.form)
 
-    duration = request.form.get('duration', default=60, type=int)  # Example duration
+        duration = request.form.get('duration', default=60, type=int)  # Example duration
+        print(f"Parsed Duration: {duration}")
 
-    script = makeScript(temp_path, duration)
-    print(duration, script)
+        if duration is None:
+            return jsonify({'error': 'Duration is missing or invalid'}), 400
 
-    return jsonify({'script': script})
-        
+        # Read file into BytesIO
+        video_bytes = file.read()
+        video_stream = io.BytesIO(video_bytes)
+
+        # Call makeScript with in-memory file
+        script = makeScript(video_stream, duration)
+
+        print(f"Duration: {duration}, Script: {script}")
+
+        return jsonify({'script': script}), 200
+
+    except Exception as e:
+        print("Error occurred in /getScript:")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

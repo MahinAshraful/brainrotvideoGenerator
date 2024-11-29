@@ -1,126 +1,219 @@
-'use client'
-import { useState } from 'react'
-import { AlertCircle, CheckCircle } from 'lucide-react'
+'use client';
 
-export default function Home() {
-  const [video, setVideo] = useState<File | null>(null)
-  const [script, setScript] = useState('')
-  const [processing, setProcessing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+import { useState, useRef, useEffect } from 'react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL } from '@ffmpeg/util';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!video || !script) {
-      setError('Please provide both video and script')
-      return
-    }
+type ProcessingStatus = 'idle' | 'loading' | 'processing' | 'completed' | 'error';
 
-    setProcessing(true)
-    setError(null)
-    setVideoUrl(null)
+const MediaCombiner: React.FC = () => {
+  const [status, setStatus] = useState<ProcessingStatus>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [ffmpeg, setFFmpeg] = useState<FFmpeg | null>(null);
+  
+  const videoRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const loadFFmpeg = async () => {
+      try {
+        setStatus('loading');
+        const ffmpegInstance = new FFmpeg();
+        
+        await ffmpegInstance.load({
+          coreURL: await toBlobURL(`/ffmpeg-core.js`, 'text/javascript'),
+          wasmURL: await toBlobURL(`/ffmpeg-core.wasm`, 'application/wasm'),
+        });
+        
+        setFFmpeg(ffmpegInstance);
+        setStatus('idle');
+      } catch (err) {
+        setError('Failed to load FFmpeg');
+        setStatus('error');
+      }
+    };
+    
+    loadFFmpeg();
+  }, []);
+
+  const getVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.src = url;
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        resolve(video.duration);
+      };
+      video.onerror = () => {
+        reject('Failed to load video metadata');
+      };
+    });
+  };
+
+  const getScript = async () => {
     try {
-      // First, save the video file for processing
-      const formData = new FormData()
-      formData.append('video', video)
-      formData.append('script', script)
+        if (!ffmpeg) {
+            throw new Error('FFmpeg is not loaded yet');
+        }
 
-      const response = await fetch('http://localhost:5000/add-tts-to-video', {
-        method: 'POST',
-        body: formData,
-      })
+        if (!videoRef.current?.files?.[0]) {
+            throw new Error('Please select a video file');
+        }
 
-      if (!response.ok) {
-        throw new Error('Failed to process video')
+        setStatus('processing');
+        setError(null);
+        const videoFile = videoRef.current.files[0];
+        const videoDuration = await getVideoDuration(videoFile);
+
+        console.log(`Video Duration (before ceiling): ${videoDuration}`);
+
+        const ceiledDuration = Math.ceil(videoDuration); // Ensure it's an integer
+        console.log(`Video Duration (ceiled): ${ceiledDuration}`);
+
+        const formData = new FormData();
+        formData.append('video', videoFile);
+        formData.append('duration', ceiledDuration.toString()); // Append as string
+
+        console.log(`FormData Duration: ${formData.get('duration')}`);
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/getScript`, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to generate script');
+        }
+
+        const data = await response.json();
+        console.log(`Server Response:`, data);
+        return data.script;
+    } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        setStatus('error');
+    }
+};
+        
+
+  const handleCombineMedia = async (): Promise<void> => {
+    try {
+      if (!ffmpeg) {
+        throw new Error('FFmpeg is not loaded yet');
       }
 
-      const outputPath = await response.text()
-      setVideoUrl(`http://localhost:5000/video/${outputPath}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error processing video')
-    } finally {
-      setProcessing(false)
-    }
-  }
+      if (!videoRef.current?.files?.[0]) {
+        throw new Error('Please select a video file');
+      }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file && !file.type.startsWith('video/')) {
-      setError('Please upload a valid video file')
-      return
+      setStatus('processing');
+      setError(null);
+
+      const videoFile = videoRef.current.files[0];
+
+      const MAX_FILE_SIZE = 100 * 1024 * 1024;
+      if (videoFile.size > MAX_FILE_SIZE) {
+        throw new Error('Video file size exceeds 100MB limit');
+      }
+
+        const script = await getScript();
+
+        console.log(script);
+
+      const formData = new FormData();
+      formData.append('script', script);
+
+      const audioResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/generate-audio`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!audioResponse.ok) {
+        throw new Error('Failed to generate audio');
+      }
+
+      const videoArrayBuffer = await videoFile.arrayBuffer();
+      const audioArrayBuffer = await audioResponse.arrayBuffer();
+
+      await ffmpeg.writeFile('input.mp4', new Uint8Array(videoArrayBuffer));
+      await ffmpeg.writeFile('audio.mp3', new Uint8Array(audioArrayBuffer));
+
+      await ffmpeg.exec([
+        '-i', 'input.mp4',
+        '-i', 'audio.mp3',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-shortest',
+        'output.mp4'
+      ]);
+
+      const data = await ffmpeg.readFile('output.mp4');
+      const blob = new Blob([data], { type: 'video/mp4' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'video-with-voiceover.mp4';
+      a.click();
+
+      await ffmpeg.deleteFile('input.mp4');
+      await ffmpeg.deleteFile('audio.mp3');
+      await ffmpeg.deleteFile('output.mp4');
+
+      setStatus('completed');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      setStatus('error');
     }
-    setVideo(file || null)
-    setError(null)
-  }
+  };
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50">
-      <div className="max-w-2xl mx-auto space-y-8">
-        <h1 className="text-3xl font-bold text-center">Video TTS Processor</h1>
-        
-        <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-lg shadow">
-          <div className="space-y-2">
-            <label className="block font-medium">Upload Video</label>
-            <input
-              type="file"
-              accept="video/*"
-              onChange={handleFileChange}
-              className="w-full p-2 border rounded"
-            />
-            {video && (
-              <p className="text-sm text-gray-600">
-                Selected: {video.name} ({Math.round(video.size / 1024 / 1024)}MB)
-              </p>
-            )}
-          </div>
+    <div className="p-4 max-w-xl mx-auto">
+      {status === 'loading' && (
+        <div className="text-center py-4">
+          Loading FFmpeg... Please wait.
+        </div>
+      )}
 
-          <div className="space-y-2">
-            <label className="block font-medium">Script for TTS</label>
-            <textarea
-              value={script}
-              onChange={(e) => setScript(e.target.value)}
-              className="w-full p-2 border rounded h-32"
-              placeholder="Enter the text you want to convert to speech..."
-            />
-            <p className="text-sm text-gray-600">
-              {script.length} characters
-            </p>
-          </div>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Select Video File:
+          </label>
+          <input
+            type="file"
+            ref={videoRef}
+            accept="video/mp4,video/webm"
+            className="w-full border rounded p-2"
+            disabled={status === 'loading' || status === 'processing'}
+          />
+        </div>
 
-          <button
-            type="submit"
-            disabled={processing || !video || !script}
-            className="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed"
-          >
-            {processing ? 'Processing...' : 'Process Video'}
-          </button>
-        </form>
+        <button
+          onClick={handleCombineMedia}
+          disabled={status === 'loading' || status === 'processing'}
+          className="w-full bg-blue-500 text-white py-2 px-4 rounded disabled:bg-gray-400"
+        >
+          {status === 'loading' ? 'Loading FFmpeg...' : 
+           status === 'processing' ? 'Processing...' : 
+           'Generate Video with Voiceover'}
+        </button>
 
         {error && (
-          <div className="p-4 bg-red-100 text-red-700 rounded flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            {error}
-          </div>
+          <div className="text-red-500 mt-2">{error}</div>
         )}
 
-        {videoUrl && (
-          <div className="p-4 bg-green-100 text-green-700 rounded space-y-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5" />
-              <p>Video processed successfully!</p>
-            </div>
-            
-            <div className="space-y-2">
-              <p className="font-medium">Preview processed video:</p>
-              <video controls className="w-full">
-                <source src={videoUrl} type="video/mp4" />
-                Your browser does not support the video element.
-              </video>
-            </div>
+        {status === 'completed' && (
+          <div className="text-green-500 mt-2 text-center font-medium">
+            Video with voiceover has been downloaded!
           </div>
         )}
       </div>
     </div>
-  )
-}
+  );
+};
+
+export default MediaCombiner;

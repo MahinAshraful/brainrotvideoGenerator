@@ -10,8 +10,8 @@ const commands = {
     mac: `osascript -e 'tell app "Terminal" to do script "cd ${path.resolve(__dirname, "client")} && npm run dev"'`
   },
   server: {
-    windows: `start cmd /k "cd server && python server2.py"`,
-    mac: `osascript -e 'tell app "Terminal" to do script "cd ${path.resolve(__dirname, "server")} && python server2.py"'`
+    windows: `start cmd /k "cd server && python server.py"`,
+    mac: `osascript -e 'tell app "Terminal" to do script "cd ${path.resolve(__dirname, "server")} && python server.py"'`
   }
 };
 

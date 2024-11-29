@@ -10,7 +10,6 @@ const MediaCombiner: React.FC = () => {
   const [status, setStatus] = useState<ProcessingStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [ffmpeg, setFFmpeg] = useState<FFmpeg | null>(null);
-  const [duration, setDuration] = useState<number>(60);
   
   const videoRef = useRef<HTMLInputElement>(null);
 
@@ -36,38 +35,66 @@ const MediaCombiner: React.FC = () => {
     loadFFmpeg();
   }, []);
 
+  const getVideoDuration = (file: File): Promise<number> => {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.src = url;
+      video.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        resolve(video.duration);
+      };
+      video.onerror = () => {
+        reject('Failed to load video metadata');
+      };
+    });
+  };
+
   const getScript = async () => {
     try {
         if (!ffmpeg) {
-          throw new Error('FFmpeg is not loaded yet');
+            throw new Error('FFmpeg is not loaded yet');
         }
-  
+
         if (!videoRef.current?.files?.[0]) {
-          throw new Error('Please select a video file');
+            throw new Error('Please select a video file');
         }
-  
+
         setStatus('processing');
         setError(null);
         const videoFile = videoRef.current.files[0];
+        const videoDuration = await getVideoDuration(videoFile);
+
+        console.log(`Video Duration (before ceiling): ${videoDuration}`);
+
+        const ceiledDuration = Math.ceil(videoDuration); // Ensure it's an integer
+        console.log(`Video Duration (ceiled): ${ceiledDuration}`);
 
         const formData = new FormData();
         formData.append('video', videoFile);
-        formData.append('duration', duration.toString());
+        formData.append('duration', ceiledDuration.toString()); // Append as string
 
+        console.log(`FormData Duration: ${formData.get('duration')}`);
 
         const response = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL}/getScript`, {
             method: 'POST',
             body: formData,
         });
 
-        const script = await response.json();
-        console.log(script);
-        return script.script
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to generate script');
+        }
+
+        const data = await response.json();
+        console.log(`Server Response:`, data);
+        return data.script;
     } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
         setStatus('error');
     }
-    }
+};
         
 
   const handleCombineMedia = async (): Promise<void> => {
@@ -153,15 +180,6 @@ const MediaCombiner: React.FC = () => {
 
       <div className="space-y-4">
         <div>
-        <label className="block text-sm font-medium mb-2">
-            Select duration:
-          </label>
-        <input
-        type="number"
-        value={duration}
-        onChange={(e) => setDuration(Number(e.target.value))}
-        placeholder="Duration in seconds"
-        />
           <label className="block text-sm font-medium mb-2">
             Select Video File:
           </label>
